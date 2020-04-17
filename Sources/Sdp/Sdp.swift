@@ -23,9 +23,13 @@ extension String {
         let nsString = self as NSString
         let results  = regex.matches(in: self, options: [], range: NSMakeRange(0, nsString.length))
         if results.count > 0 {
-            return (0..<results[0].numberOfRanges).map {
-                results[0].range(at: $0).location != NSNotFound ? nsString.substring(with: results[0].range(at: $0)): ""
+            var filterResult = [String]()
+            for r in 0..<results[0].numberOfRanges {
+                if results[0].range(at: r).location != NSNotFound{
+                    filterResult.append(nsString.substring(with: results[0].range(at: r )))
+                }
             }
+            return filterResult
         }else{
             return []
         }
@@ -37,7 +41,7 @@ extension String {
 
 //https://tools.ietf.org/html/rfc4566
 public struct Sdp {
-    public static func parse(sdpStr:String) -> [String:Any]{
+    public static func parse(sdpStr:String) -> Session {
         //TODO: make separator as parameters
         let lines  = sdpStr.components(separatedBy: "\n")
         //find indexs of medias
@@ -47,15 +51,13 @@ public struct Sdp {
                 mediaIndexs.append(index)
             }
         }
-        
-        var sessionDic = [String:Any]()
-        var medias = [[String:Any]]()
+        var session:Session
         if 0 == mediaIndexs.count {
             //no media
-            sessionDic = handleSession(lines: lines)
+            session = handleSession(lines: lines)
         }else{
             let sessionLines  = Array(lines[..<mediaIndexs[0]])
-            sessionDic = handleSession(lines: sessionLines)
+            session = handleSession(lines: sessionLines)
             
             for i in 0..<mediaIndexs.count {
                 var mediaLines:[String];
@@ -65,19 +67,18 @@ public struct Sdp {
                     mediaLines  = Array(lines[mediaIndexs[i]..<mediaIndexs[i+1]])
                 }
                 let media = handleMedia(lines: mediaLines)
-                medias.append(media)
+                session.medias.append(media)
             }
         }
-        sessionDic["media"] = medias
-        return sessionDic
+        return session
     }
-    
-    public static func stringify( [String:Any]) -> String{
-        
-    }
-    
-    static func handleSession(lines:[String]) -> [String:Any]{
-        var sessionDic = [String:Any]()
+//    
+//    public static func stringify( sdpDic:[String:Any]) -> String{
+//
+//    }
+//    
+    static func handleSession(lines:[String]) -> Session {
+        let session = Session()
         for line in lines{
             let type = line[line.startIndex]
             let value = line[2...]
@@ -85,13 +86,13 @@ public struct Sdp {
             switch type {
             case "v":
                 //%x76 "=" 1*DIGIT CRLF
-                sessionDic["version"] = Int(line[2])
+                session.version = Int(line[2])
             case "o":
-                sessionDic["origin"] = value
+                session.origin = value
             case "s":
-                sessionDic["name"] = value
+                session.name = value
             case "t":
-                sessionDic["timing"] = value
+                session.timing = value
             case "a":
                 let attrPair  = value.components(separatedBy: ":")
                 if attrPair.count == 2 {
@@ -100,9 +101,9 @@ public struct Sdp {
                     switch attrKey {
                         case "group":
                             //TODO:
-                            sessionDic["group"] = attrValue
+                            session.group = attrValue
                         case "msid-semantic":
-                            sessionDic["msidSemantic"] = attrValue
+                            session.msidSemantic = attrValue
                         default:
                             print("unknown attr \(attrKey)")
                     }
@@ -112,13 +113,11 @@ public struct Sdp {
             }
         }
         
-        return sessionDic
+        return session
     }
     
-    static func handleMedia(lines:[String]) -> [String:Any] {
-        print(lines)
-
-        var mediaDic = [String:Any]()
+    static func handleMedia(lines:[String]) -> Media {
+        let media = Media()
         for line in lines{
             let type = line[line.startIndex]
             let value = line[2...]
@@ -128,27 +127,29 @@ public struct Sdp {
                 let pattern = #"(video|audio|application) ([0-9]+) ([A-Z/]+) ([[0-9]|\s]+)"#
                 let result = value.matchingStrings(regex: pattern)
                 if result.count == 5 {
-                    mediaDic["type"] = result[1]
+                    media.type = result[1]
                     //TODO: Int
-                    mediaDic["port"] = result[2]
-                    mediaDic["protocol"] = result[3]
+                    media.port = Int(result[2])
+                    media.proto = result[3]
                     //FIXME: use array
-                    mediaDic["payloads"] = result[4]
+                    let payloads = result[4].components(separatedBy: " ")
+                    for payload in payloads {
+                        let rtp = Rtp(payload: Int(payload)!)
+                        media.rtps.append(rtp)
+                    }
                 }
-                
             case "c":
-                mediaDic["connection"] = value
-
+                media.connection = value
             case "a":
                 let attrPair  = value.split(separator: ":")
                 if attrPair.count == 1{
                     switch value {
                     case "rtcp-mux":
-                        mediaDic["rtcpMux"] = value
+                        media.rtcpMux = true
                     case "rtcp-rsize":
-                        mediaDic["rtcpRsize"] = value
+                        media.rtcpRsize = true
                     case "sendrecv","sendonly","recvonly","inactive":
-                        mediaDic["direction"] = value
+                        media.direction = value
                     default:
                         print("unknown attr \(value)")
                      }
@@ -157,105 +158,74 @@ public struct Sdp {
                     let attrValue = attrPair[1]
                     switch attrKey {
                     case "ice-ufrag":
-                       mediaDic["iceUfrag"] = attrValue
+                        media.iceUfrag = attrValue
                     case "ice-pwd":
-                       mediaDic["icePwd"] = attrValue
+                        media.icePwd = attrValue
                     case "ice-options":
-                       mediaDic["iceOptions"] = attrValue
+                        media.iceOptions = attrValue
                     case "setup":
-                        mediaDic["setup"] = attrValue
+                        media.setup = attrValue
                     case "mid":
                         //TODO: to Int
-                        mediaDic["mid"] = attrValue
+                        media.mid = Int(attrValue)
                     case "rtcp":
                         //TODO: destruct
-                        mediaDic["rtcp"] = attrValue
+                        media.rtcp = attrValue
                     case "msid":
-                        mediaDic["msid"] = attrValue
+                        media.msid = attrValue
                     case "fingerprint":
                         let fingerprintPair = attrValue.split(separator: " ")
                         //TODO: check pair count
-                        mediaDic["fingerprint"] = ["type":fingerprintPair[0],"hash":fingerprintPair[1]]
+                        media.fingerprint = Fingerprint(type: fingerprintPair[0], hash: fingerprintPair[1])
                     case "extmap":
-                        if mediaDic["ext"] == nil {
-                            mediaDic["ext"] = [[String:Any]]()
-                        }
-                        if var dict = mediaDic["ext"] as? [[String:Any]]
-                        {
-                            let pattern = #"([0-9]+) (\S+)"#
-                            let result = value.matchingStrings(regex: pattern)
-                            if result.count == 3 {
-                                dict.append(["value":result[1],"uri":result[2]])
-                            }
-                            mediaDic["ext"] = dict
-                        }
+                         let pattern = #"([0-9]+) (\S+)"#
+                         let result = value.matchingStrings(regex: pattern)
+                         if result.count == 3 {
+                            let ext = Extension(value: result[1], uri: result[2])
+                            media.extensions.append(ext)
+                         }
+                        
                     case "rtpmap":
-                        if mediaDic["rtp"] == nil {
-                            mediaDic["rtp"] = [[String:Any]]()
-                        }
-                        if var dict = mediaDic["rtp"] as? [[String:Any]]
-                        {
-                            let pattern = #"([0-9]+) ([\w]+)/([0-9]+)"#
-                            let result = value.matchingStrings(regex: pattern)
-                            if result.count == 4 {
-                                dict.append(["payload":result[1],"codec":result[2],"rate":result[3]])
+                        let pattern = #"([0-9]+) ([\w]+)/([0-9]+)(?:/([0-9]+))?"#
+                        let result = value.matchingStrings(regex: pattern)
+                        if result.count >= 4 {
+                            if let index = media.getRtpIndex(payload: Int(result[1])!)  {
+                                media.rtps[index].codec = result[2]
+                                media.rtps[index].rate = Int(result[3])
+                                if result.count == 5 {
+                                    media.rtps[index].encoding = Int(result[4])
+                                }
                             }
-                            mediaDic["rtp"] = dict
                         }
                     case "rtcp-fb":
-                        if mediaDic["rtcpFb"] == nil {
-                              mediaDic["rtcpFb"] = [[String:Any]]()
-                          }
-                          if var dict = mediaDic["rtcpFb"] as? [[String:Any]]
-                          {
-                              let pattern = #"([0-9]+) ([\w\p{Z}-]+)"#
-                              let result = value.matchingStrings(regex: pattern)
-                              if result.count == 3 {
-                                  dict.append(["payload":result[1],"type":result[2]])
-                              }
-                              mediaDic["rtcpFb"] = dict
+                          let pattern = #"([0-9]+) ([\w\p{Z}-]+)"#
+                          let result = value.matchingStrings(regex: pattern)
+                          //TODO: check count
+                          if let index = media.getRtpIndex(payload: Int(result[1])!)  {
+                            media.rtps[index].rtcpFb.append(result[2])
                           }
                     case "fmtp":
-                        if mediaDic["fmtp"] == nil {
-                              mediaDic["fmtp"] = [[String:Any]]()
-                          }
-                          if var dict = mediaDic["fmtp"] as? [[String:Any]]
-                          {
-                              let pattern = #"([0-9]+) ([\w-;=]+)"#
-                              let result = value.matchingStrings(regex: pattern)
-                              if result.count == 3 {
-                                  dict.append(["payload":result[1],"config":result[2]])
-                              }
-                              mediaDic["fmtp"] = dict
-                          }
+                        let pattern = #"([0-9]+) ([\w-;=]+)"#
+                        let result = value.matchingStrings(regex: pattern)
+                        //TODO: check count
+                
+                        if let index = media.getRtpIndex(payload: Int(result[1])!)  {
+                            media.rtps[index].fmtp.append(result[2])
+                        }
                     case "ssrc":
                         //https://tools.ietf.org/html/rfc5576#page-5
-
-                        if mediaDic["ssrc"] == nil {
-                            mediaDic["ssrc"] = [[String:Any]]()
-                        }
-                        if var dict = mediaDic["ssrc"] as? [[String:Any]]
-                        {
-                            let pattern = #"([0-9]+) ([\w]+):([\w-\p{Z}]+)$"#
-                            let result = value.matchingStrings(regex: pattern)
-                            if result.count == 4 {
-                                dict.append(["id":result[1],"attribute":result[2],"value":result[3]])
-                            }
-                            mediaDic["ssrc"] = dict
-                        }
+                        let pattern = #"([0-9]+) ([\w]+):([\w-\p{Z}]+)$"#
+                        let result = value.matchingStrings(regex: pattern)
+                        //TODO: check count
+                        let ssrc = Ssrc(id: Int(result[1])!, attribute: result[2], value: result[3])
+                        media.ssrcs.append(ssrc)
                     case "ssrc-group":
-
-                        if mediaDic["ssrcGroup"] == nil {
-                            mediaDic["ssrcGroup"] = [[String:Any]]()
-                        }
-                        if var dict = mediaDic["ssrcGroup"] as? [[String:Any]]
-                        {
-                            let pattern = #"([\w]+) ([0-9\p{Z}]+)"#
-                            let result = value.matchingStrings(regex: pattern)
-                            if result.count == 3 {
-                                dict.append(["semantics":result[1],"ssrc":result[2]])
-                            }
-                            mediaDic["ssrcGroup"] = dict
+                        let pattern = #"([\w]+) ([0-9\p{Z}]+)"#
+                        let result = value.matchingStrings(regex: pattern)
+                        if result.count == 3 {
+                            let ssrcs = result[2].components(separatedBy: " ").map {Int($0)!}
+                            let sg = SsrcGroup(semantics: result[1], ssrcs: ssrcs)
+                            media.ssrcGroups.append(sg)
                         }
                     default:
                        print("unknown attr \(attrKey)")
@@ -266,6 +236,6 @@ public struct Sdp {
                 print("unknown  type \(type)")
             }
         }
-        return mediaDic
+        return media
     }
 }

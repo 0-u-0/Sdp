@@ -64,7 +64,7 @@ a=sendonly
 a=msid:- abc
 a=rtcp-mux
 a=rtcp-rsize
-a=rtpmap:96 H264/90000
+a=rtpmap:96 H264/90000/2
 a=rtcp-fb:96 goog-remb
 a=rtcp-fb:96 transport-cc
 a=rtcp-fb:96 ccm fir
@@ -107,6 +107,7 @@ a=ssrc:3643929305 label:abc
 
 let result = Sdp.parse(sdpStr:testSdp)
 
-result.printJson()
+print(result.toString())
+//result.printJson()
 
 //print(result)
