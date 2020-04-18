@@ -16,7 +16,7 @@ public class Session{
     var msidSemantic:String?
     var medias = [Media]()
 
-    func toString() -> String {
+    public func toString() -> String {
         var lines = [String]()
         if version != nil {
             lines.append("v=\(version!)")

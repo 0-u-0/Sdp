@@ -34,16 +34,21 @@ extension String {
             return []
         }
     }
-    func split(separator:Character) -> [String] {
+    func splitOnce(separator:Character) -> [String] {
         return split(separator:separator,maxSplits:1,omittingEmptySubsequences:true).map{String($0)}
     }
+    
+    func split(separator:Character) -> [String] {
+        return split(separator:separator,omittingEmptySubsequences:true).map{String($0)}
+    }
+    
 }
 
 //https://tools.ietf.org/html/rfc4566
 public struct Sdp {
     public static func parse(sdpStr:String) -> Session {
         //TODO: make separator as parameters
-        let lines  = sdpStr.components(separatedBy: "\n")
+        let lines  = sdpStr.split(separator: "\r\n")
         //find indexs of medias
         var mediaIndexs = [Int]()
         for (index,line) in lines.enumerated() {
@@ -51,6 +56,7 @@ public struct Sdp {
                 mediaIndexs.append(index)
             }
         }
+        //TODO: no session
         var session:Session
         if 0 == mediaIndexs.count {
             //no media
@@ -141,7 +147,7 @@ public struct Sdp {
             case "c":
                 media.connection = value
             case "a":
-                let attrPair  = value.split(separator: ":")
+                let attrPair  = value.splitOnce(separator: ":")
                 if attrPair.count == 1{
                     switch value {
                     case "rtcp-mux":
@@ -174,7 +180,7 @@ public struct Sdp {
                     case "msid":
                         media.msid = attrValue
                     case "fingerprint":
-                        let fingerprintPair = attrValue.split(separator: " ")
+                        let fingerprintPair = attrValue.splitOnce(separator: " ")
                         //TODO: check pair count
                         media.fingerprint = Fingerprint(type: fingerprintPair[0], hash: fingerprintPair[1])
                     case "extmap":

@@ -1,3 +1,4 @@
 # Sdp
 
-A description of this package.
+Session Desription Protocol Library.
+

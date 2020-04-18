@@ -5,9 +5,10 @@ import PackageDescription
 
 let package = Package(
     name: "Sdp",
+    platforms: [.iOS(.v13), .macOS(.v10_15)],
     products: [
         // Products define the executables and libraries produced by a package, and make them visible to other packages.
-        .executable(
+        .library(
             name: "Sdp",
             targets: ["Sdp"]),
     ],
