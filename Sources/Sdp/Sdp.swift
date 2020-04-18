@@ -192,7 +192,7 @@ public struct Sdp {
                          }
                         
                     case "rtpmap":
-                        let pattern = #"([0-9]+) ([\w]+)/([0-9]+)(?:/([0-9]+))?"#
+                        let pattern = #"([0-9]+) ([\w-]+)/([0-9]+)(?:/([0-9]+))?"#
                         let result = value.matchingStrings(regex: pattern)
                         if result.count >= 4 {
                             if let index = media.getRtpIndex(payload: Int(result[1])!)  {
